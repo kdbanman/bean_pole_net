@@ -21,6 +21,7 @@
 
 import argparse
 import sys
+import os 
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -35,10 +36,12 @@ def deepnn(x):
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
   x_image = tf.reshape(x, [-1, 28, 28, 1])
 
-  h_conv = bean_pole_layers(x_image, 10, 4)
+  tf.summary.image("input image", x_image, collections=["bean_pole_images"])
 
-  # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
-  # is down to 7x7x64 feature maps -- maps this to 1024 features.
+  # Bean pole layers
+  h_conv = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+
+  # Fully connected layer
   W_fc1 = weight_variable([28 * 28, 1024])
   b_fc1 = bias_variable([1024])
 
@@ -73,6 +76,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
         layer_input_skip_distance += 1
 
     layer = hidden_layer(layer_input)
+    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"])
     layers.append(layer)
 
   return layers[-1]
@@ -121,23 +125,58 @@ def main(_):
   correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+  tf.summary.scalar('cross entropy loss', cross_entropy, collections=['train_stats'])
+  tf.summary.scalar('accuracy', accuracy, collections=['train_stats'])
+  merged_train_stats = tf.summary.merge_all(key='train_stats')
+  merged_bean_pole_images = tf.summary.merge_all(key='bean_pole_images')
+  
+  saver = tf.train.Saver()
   with tf.Session() as sess:
+    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, "train"), sess.graph)
     sess.run(tf.global_variables_initializer())
     for i in range(20000):
       batch = mnist.train.next_batch(50)
+
       if i % 100 == 0:
         train_accuracy = accuracy.eval(feed_dict={
             x: batch[0], y_: batch[1], keep_prob: 1.0})
         print('step %d, training accuracy %g' % (i, train_accuracy))
-      train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+
+      if i % 1000 == 0:
+        saver.save(sess, os.path.join(FLAGS.train_dir, "model.ckpt"), global_step=i)
+
+      # Train the network, recording stats every tenth step
+      if i % 1000 == 0:
+        summary, _ = sess.run([merged_bean_pole_images, train_step], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        train_writer.add_summary(summary, i)
+      elif i % 10 == 0:
+        summary, _ = sess.run([merged_train_stats, train_step], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        train_writer.add_summary(summary, i)
+      else:
+        sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
     print('test accuracy %g' % accuracy.eval(feed_dict={
         x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
 
 if __name__ == '__main__':
+  dir_path = os.path.dirname(os.path.realpath(__file__))
+
   parser = argparse.ArgumentParser()
   parser.add_argument('--data_dir', type=str,
-                      default='/tmp/tensorflow/mnist/input_data',
+                      default=os.path.join(dir_path, 'input_data'),
                       help='Directory for storing input data')
+  parser.add_argument('--train_dir', type=str,
+                      default=os.path.join(dir_path, 'checkpoints'),
+                      help='Directory for storing training checkpoints')
+  parser.add_argument('--log_dir', type=str,
+                      default=os.path.join(dir_path, 'log'),
+                      help='Directory for storing log output')
+  parser.add_argument('--pole_depth', type=int,
+                      default=10,
+                      help='Number of bean pole layers to use between input and output')
+  parser.add_argument('--max_skip_depth', type=int,
+                      default=3,
+                      help='Max number of bean pole layers to skip')
   FLAGS, unparsed = parser.parse_known_args()
+  print(FLAGS)
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
