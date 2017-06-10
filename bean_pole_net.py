@@ -21,20 +21,25 @@
 
 import argparse
 import sys
-import os 
+import os
 
 from tensorflow.examples.tutorials.mnist import input_data
 
 import tensorflow as tf
 
+
+# pylint: disable=W0311,C0103
+
+
 FLAGS = None
 
 
-def deepnn(x):
+def bean_pole_net(x_in):
+  """Construct and return an MNIST beanpole net with dropout keep probability as a tuple."""
   # Reshape to use within a convolutional neural net.
   # Last dimension is for "features" - there is only one here, since images are
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
-  x_image = tf.reshape(x, [-1, 28, 28, 1])
+  x_image = tf.reshape(x_in, [-1, 28, 28, 1])
 
   tf.summary.image("input image", x_image, collections=["bean_pole_images"])
 
@@ -62,18 +67,19 @@ def deepnn(x):
 
 
 def bean_pole_layers(x_in, layer_count, max_skip_depth):
+  """Construct and return bean pole layers with the input specified."""
   layers = [x_in]
   while len(layers) <= layer_count:
     print("Constructing bean pole layer " + str(len(layers)))
-    layer_input_skip_distance = 1
+    input_skip_distance = 1
 
-    print("Adding layer " + str(len(layers) - layer_input_skip_distance) + " to input")
-    layer_input = layers[len(layers) - layer_input_skip_distance]
-    layer_input_skip_distance += 1
-    while layer_input_skip_distance <= max_skip_depth and len(layers) - layer_input_skip_distance >= 0:
-        print("Adding layer " + str(len(layers) - layer_input_skip_distance) + " to input")
-        layer_input += layers[len(layers) - layer_input_skip_distance]
-        layer_input_skip_distance += 1
+    print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
+    layer_input = layers[len(layers) - input_skip_distance]
+    input_skip_distance += 1
+    while input_skip_distance <= max_skip_depth and len(layers) - input_skip_distance >= 0:
+      print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
+      layer_input += layers[len(layers) - input_skip_distance]
+      input_skip_distance += 1
 
     layer = hidden_layer(layer_input)
     tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"])
@@ -81,7 +87,9 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
 
   return layers[-1]
 
+
 def hidden_layer(x_in):
+  """5x5 relu convolution with bias"""
   W_conv = weight_variable([5, 5, 1, 1])
   b_conv = bias_variable([1])
   h_conv = tf.nn.relu(conv2d(x_in, W_conv) + b_conv)
@@ -117,7 +125,7 @@ def main(_):
   y_ = tf.placeholder(tf.float32, [None, 10])
 
   # Build the graph for the deep net
-  y_conv, keep_prob = deepnn(x)
+  y_conv, keep_prob = bean_pole_net(x)
 
   cross_entropy = tf.reduce_mean(
       tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
@@ -129,7 +137,7 @@ def main(_):
   tf.summary.scalar('accuracy', accuracy, collections=['train_stats'])
   merged_train_stats = tf.summary.merge_all(key='train_stats')
   merged_bean_pole_images = tf.summary.merge_all(key='bean_pole_images')
-  
+
   saver = tf.train.Saver()
   with tf.Session() as sess:
     train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, "train"), sess.graph)
@@ -147,10 +155,16 @@ def main(_):
 
       # Train the network, recording stats every tenth step
       if i % 1000 == 0:
-        summary, _ = sess.run([merged_bean_pole_images, train_step], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        summary, _ = sess.run( \
+          [merged_bean_pole_images, train_step], \
+          feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5} \
+        )
         train_writer.add_summary(summary, i)
       elif i % 10 == 0:
-        summary, _ = sess.run([merged_train_stats, train_step], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        summary, _ = sess.run( \
+          [merged_train_stats, train_step], \
+          feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5} \
+        )
         train_writer.add_summary(summary, i)
       else:
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
