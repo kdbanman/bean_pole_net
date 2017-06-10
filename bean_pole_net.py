@@ -20,12 +20,14 @@
 # ==============================================================================
 
 import argparse
+import time
 import sys
 import os
 
 from tensorflow.examples.tutorials.mnist import input_data
 
 import tensorflow as tf
+import numpy as np
 
 
 # pylint: disable=W0311,C0103
@@ -44,26 +46,9 @@ def bean_pole_net(x_in):
   tf.summary.image("input image", x_image, collections=["bean_pole_images"])
 
   # Bean pole layers
-  h_conv = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
 
-  # Fully connected layer
-  W_fc1 = weight_variable([28 * 28, 1024])
-  b_fc1 = bias_variable([1024])
-
-  h_conv_flat = tf.reshape(h_conv, [-1, 28 * 28])
-  h_fc1 = tf.nn.relu(tf.matmul(h_conv_flat, W_fc1) + b_fc1)
-
-  # Dropout - controls the complexity of the model, prevents co-adaptation of
-  # features.
-  keep_prob = tf.placeholder(tf.float32)
-  h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-
-  # Map the 1024 features to 10 classes, one for each digit
-  W_fc2 = weight_variable([1024, 10])
-  b_fc2 = bias_variable([10])
-
-  y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-  return y_conv, keep_prob
+  return bean_out
 
 
 def bean_pole_layers(x_in, layer_count, max_skip_depth):
@@ -83,6 +68,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
 
     layer = hidden_layer(layer_input)
     tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"])
+
     layers.append(layer)
 
   return layers[-1]
@@ -114,6 +100,36 @@ def bias_variable(shape):
   return tf.Variable(initial)
 
 
+def imagify_batch(batch):
+  """
+  maps digits with curly bits to 28x28 all ones, zeros otherwise.
+  3, 6, 8, 9, 0
+  """
+  new_batch = np.zeros([50, 28, 28, 1])
+  i = 0
+  for vec in batch:
+    np.copyto(new_batch[i], vec_to_image(vec))
+    i += 1
+
+  return new_batch
+
+
+def vec_to_image(vec):
+  if vec[2] > 0.5 or \
+     vec[5] > 0.5 or \
+     vec[7] > 0.5 or \
+     vec[8] > 0.5 or \
+     vec[9] > 0.5:
+    return np.ones([28, 28, 1])
+  else:
+    return np.zeros([28, 28, 1])
+
+
+def ensure_dir(directory):
+  if not os.path.exists(directory):
+    os.makedirs(directory)
+
+
 def main(_):
   # Import data
   mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
@@ -122,55 +138,57 @@ def main(_):
   x = tf.placeholder(tf.float32, [None, 784])
 
   # Define loss and optimizer
-  y_ = tf.placeholder(tf.float32, [None, 10])
+  y_ = tf.placeholder(tf.float32, [None, 28, 28, 1])
 
   # Build the graph for the deep net
-  y_conv, keep_prob = bean_pole_net(x)
+  y_conv = bean_pole_net(x)
 
-  cross_entropy = tf.reduce_mean(
-      tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
-  train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-  correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-  accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+  mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
+  train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_error)
 
-  tf.summary.scalar('cross entropy loss', cross_entropy, collections=['train_stats'])
-  tf.summary.scalar('accuracy', accuracy, collections=['train_stats'])
+  tf.summary.scalar('mean squared error', mean_squared_error, collections=['train_stats'])
   merged_train_stats = tf.summary.merge_all(key='train_stats')
   merged_bean_pole_images = tf.summary.merge_all(key='bean_pole_images')
 
   saver = tf.train.Saver()
   with tf.Session() as sess:
-    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, "train"), sess.graph)
+
+    ensure_dir(os.path.join(FLAGS.log_dir, FLAGS.run_name, "train"))
+    ensure_dir(os.path.join(FLAGS.train_dir, FLAGS.run_name))
+
+    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, FLAGS.run_name, "train"), sess.graph)
     sess.run(tf.global_variables_initializer())
     for i in range(20000):
       batch = mnist.train.next_batch(FLAGS.batch_size)
+      batch_targets = imagify_batch(batch[1])
+      tf.summary.image("bean pole image target", batch_targets, collections=["bean_pole_images"])
 
       if i % 100 == 0:
-        train_accuracy = accuracy.eval(feed_dict={
-            x: batch[0], y_: batch[1], keep_prob: 1.0})
-        print('step %d, training accuracy %g' % (i, train_accuracy))
+        train_error = mean_squared_error.eval(feed_dict={
+            x: batch[0], y_: batch_targets})
+        print('step %d, training error %g' % (i, train_error))
 
       if i % 1000 == 0:
-        saver.save(sess, os.path.join(FLAGS.train_dir, "model.ckpt"), global_step=i)
+        saver.save(sess, os.path.join(FLAGS.train_dir, FLAGS.run_name, "model.ckpt"), global_step=i)
 
       # Train the network, recording stats every tenth step
       if i % 1000 == 0:
         summary, _ = sess.run( \
           [merged_bean_pole_images, train_step], \
-          feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5} \
+          feed_dict={x: batch[0], y_: batch_targets} \
         )
         train_writer.add_summary(summary, i)
       elif i % 10 == 0:
         summary, _ = sess.run( \
           [merged_train_stats, train_step], \
-          feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5} \
+          feed_dict={x: batch[0], y_: batch_targets} \
         )
         train_writer.add_summary(summary, i)
       else:
-        sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        sess.run(train_step, feed_dict={x: batch[0], y_: batch_targets})
 
-    print('test accuracy %g' % accuracy.eval(feed_dict={
-        x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+    print('test error %g' % mean_squared_error.eval(feed_dict={
+        x: mnist.test.images, y_: imagify_batch(mnist.test.labels)}))
 
 if __name__ == '__main__':
   dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -194,6 +212,10 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size', type=int,
                       default=50,
                       help='Training minibatch size')
+  parser.add_argument('--run_name', type=str,
+                      default=str(int(time.time())),
+                      help='Name for the run')
   FLAGS, unparsed = parser.parse_known_args()
+
   print(FLAGS)
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
