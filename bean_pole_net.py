@@ -143,7 +143,7 @@ def main(_):
     train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, "train"), sess.graph)
     sess.run(tf.global_variables_initializer())
     for i in range(20000):
-      batch = mnist.train.next_batch(50)
+      batch = mnist.train.next_batch(FLAGS.batch_size)
 
       if i % 100 == 0:
         train_accuracy = accuracy.eval(feed_dict={
@@ -191,6 +191,9 @@ if __name__ == '__main__':
   parser.add_argument('--max_skip_depth', type=int,
                       default=3,
                       help='Max number of bean pole layers to skip')
+  parser.add_argument('--batch_size', type=int,
+                      default=50,
+                      help='Training minibatch size')
   FLAGS, unparsed = parser.parse_known_args()
   print(FLAGS)
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
