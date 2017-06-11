@@ -105,27 +105,23 @@ def imagify_batch(batch):
   maps digits with curly bits to 28x28 all ones, zeros otherwise.
   3, 6, 8, 9, 0
   """
-  new_batch = np.zeros([50, 28, 28, 1])
-  i = 0
-  for vec in batch:
-    np.copyto(new_batch[i], vec_to_image(vec))
-    i += 1
-
-  return new_batch
+  return [vec_to_image(vec) for vec in batch]
 
 
 def vec_to_image(vec):
+  """Converts an MNIST label vector to a greyscale image."""
   if vec[2] > 0.5 or \
      vec[5] > 0.5 or \
      vec[7] > 0.5 or \
      vec[8] > 0.5 or \
      vec[9] > 0.5:
-    return np.ones([28, 28, 1])
+    return np.ones([28, 28, 1], dtype=np.float32)
   else:
-    return np.zeros([28, 28, 1])
+    return np.zeros([28, 28, 1], dtype=np.float32)
 
 
 def ensure_dir(directory):
+  """Ensures the existance of a directory."""
   if not os.path.exists(directory):
     os.makedirs(directory)
 
@@ -156,12 +152,11 @@ def main(_):
     ensure_dir(os.path.join(FLAGS.log_dir, FLAGS.run_name, "train"))
     ensure_dir(os.path.join(FLAGS.train_dir, FLAGS.run_name))
 
-    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, FLAGS.run_name, "train"), sess.graph)
+    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, FLAGS.run_name), sess.graph)
     sess.run(tf.global_variables_initializer())
     for i in range(20000):
       batch = mnist.train.next_batch(FLAGS.batch_size)
       batch_targets = imagify_batch(batch[1])
-      tf.summary.image("target_image", batch_targets, collections=["bean_pole_images"])
 
       if i % 100 == 0:
         train_error = mean_squared_error.eval(feed_dict={
