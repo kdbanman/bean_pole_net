@@ -59,14 +59,14 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
     input_skip_distance = 1
 
     print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
-    layer_input = layers[len(layers) - input_skip_distance]
+    layer_input = hidden_layer(layers[len(layers) - input_skip_distance], 1)
     input_skip_distance += 1
     while input_skip_distance <= max_skip_depth and len(layers) - input_skip_distance >= 0:
       print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
-      layer_input += layers[len(layers) - input_skip_distance]
+      layer_input += hidden_layer(layers[len(layers) - input_skip_distance], 1)
       input_skip_distance += 1
 
-    layer = hidden_layer(layer_input)
+    layer = hidden_layer(layer_input, 5)
     tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"])
 
     layers.append(layer)
@@ -74,9 +74,9 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
   return layers[-1]
 
 
-def hidden_layer(x_in):
-  """5x5 relu convolution with bias"""
-  W_conv = weight_variable([5, 5, 1, 1])
+def hidden_layer(x_in, convolution_size):
+  """relu convolution with bias"""
+  W_conv = weight_variable([convolution_size, convolution_size, 1, 1])
   b_conv = bias_variable([1])
   h_conv = tf.nn.relu(conv2d(x_in, W_conv) + b_conv)
 
@@ -161,7 +161,7 @@ def main(_):
     for i in range(20000):
       batch = mnist.train.next_batch(FLAGS.batch_size)
       batch_targets = imagify_batch(batch[1])
-      tf.summary.image("bean pole image target", batch_targets, collections=["bean_pole_images"])
+      tf.summary.image("target_image", batch_targets, collections=["bean_pole_images"])
 
       if i % 100 == 0:
         train_error = mean_squared_error.eval(feed_dict={
