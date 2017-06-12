@@ -43,10 +43,24 @@ def bean_pole_net(x_in):
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
   x_image = tf.reshape(x_in, [-1, 28, 28, 1])
 
-  tf.summary.image("input image", x_image, collections=["bean_pole_images"])
+  tf.summary.image("input image", x_image, collections=["bean_pole_images"], max_outputs=10)
 
   # Bean pole layers
-  bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  # bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  # First convolutional layer - maps one grayscale image to 32 feature maps.
+  W_conv1 = weight_variable([5, 5, 1, 32])
+  b_conv1 = bias_variable([32])
+  h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+
+  # Second convolutional layer -- maps 32 feature maps to 64.
+  W_conv2 = weight_variable([5, 5, 32, 64])
+  b_conv2 = bias_variable([64])
+  h_conv2 = tf.nn.relu(conv2d(h_conv1, W_conv2) + b_conv2)
+
+  # Combination convolutional layer -- maps 64 feature maps to 1
+  W_conv3 = weight_variable([5, 5, 64, 1])
+  b_conv3 = bias_variable([1])
+  bean_out = tf.nn.relu(conv2d(h_conv2, W_conv3) + b_conv3)
 
   return bean_out
 
@@ -67,7 +81,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
       input_skip_distance += 1
 
     layer = hidden_layer(layer_input, 5)
-    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"])
+    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=10)
 
     layers.append(layer)
 
@@ -102,8 +116,7 @@ def bias_variable(shape):
 
 def imagify_batch(batch):
   """
-  maps digits with curly bits to 28x28 all ones, zeros otherwise.
-  3, 6, 8, 9, 0
+  maps even digits to 28x28 all ones, zeros otherwise.
   """
   return [vec_to_image(vec) for vec in batch]
 
@@ -111,10 +124,10 @@ def imagify_batch(batch):
 def vec_to_image(vec):
   """Converts an MNIST label vector to a greyscale image."""
   if vec[2] > 0.5 or \
-     vec[5] > 0.5 or \
-     vec[7] > 0.5 or \
+     vec[4] > 0.5 or \
+     vec[6] > 0.5 or \
      vec[8] > 0.5 or \
-     vec[9] > 0.5:
+     vec[0] > 0.5:
     return np.ones([28, 28, 1], dtype=np.float32)
   else:
     return np.zeros([28, 28, 1], dtype=np.float32)
@@ -138,6 +151,7 @@ def main(_):
 
   # Build the graph for the deep net
   y_conv = bean_pole_net(x)
+  tf.summary.image("output_image", y_conv, collections=["bean_pole_images"], max_outputs=10)
 
   mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
   train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_error)
@@ -154,7 +168,8 @@ def main(_):
 
     train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, FLAGS.run_name), sess.graph)
     sess.run(tf.global_variables_initializer())
-    for i in range(20000):
+    i = 0
+    while True:
       batch = mnist.train.next_batch(FLAGS.batch_size)
       batch_targets = imagify_batch(batch[1])
 
@@ -165,6 +180,9 @@ def main(_):
 
       if i % 1000 == 0:
         saver.save(sess, os.path.join(FLAGS.train_dir, FLAGS.run_name, "model.ckpt"), global_step=i)
+        test_error = mean_squared_error.eval(feed_dict={x: mnist.test.images, y_: imagify_batch(mnist.test.labels)})
+        print('step %d, test error %g' % (i, test_error))
+        tf.summary.scalar('test_error', test_error, collections=['train_stats'])
 
       # Train the network, recording stats every tenth step
       if i % 1000 == 0:
@@ -181,9 +199,8 @@ def main(_):
         train_writer.add_summary(summary, i)
       else:
         sess.run(train_step, feed_dict={x: batch[0], y_: batch_targets})
-
-    print('test error %g' % mean_squared_error.eval(feed_dict={
-        x: mnist.test.images, y_: imagify_batch(mnist.test.labels)}))
+      
+      i += 1
 
 if __name__ == '__main__':
   dir_path = os.path.dirname(os.path.realpath(__file__))
