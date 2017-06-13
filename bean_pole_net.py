@@ -43,54 +43,55 @@ def bean_pole_net(x_in):
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
   x_image = tf.reshape(x_in, [-1, 28, 28, 1])
 
-  tf.summary.image("input image", x_image, collections=["bean_pole_images"], max_outputs=10)
+  tf.summary.image("input image", x_image, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   # Bean pole layers
-  # bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
-  # First convolutional layer - maps one grayscale image to 32 feature maps.
-  W_conv1 = weight_variable([5, 5, 1, 32])
-  b_conv1 = bias_variable([32])
-  h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-
-  # Second convolutional layer -- maps 32 feature maps to 64.
-  W_conv2 = weight_variable([5, 5, 32, 64])
-  b_conv2 = bias_variable([64])
-  h_conv2 = tf.nn.relu(conv2d(h_conv1, W_conv2) + b_conv2)
-
-  # Combination convolutional layer -- maps 64 feature maps to 1
-  W_conv3 = weight_variable([5, 5, 64, 1])
-  b_conv3 = bias_variable([1])
-  bean_out = tf.nn.relu(conv2d(h_conv2, W_conv3) + b_conv3)
+  bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
 
   return bean_out
 
 
 def bean_pole_layers(x_in, layer_count, max_skip_depth):
-  """Construct and return bean pole layers with the input specified."""
+  """
+  Construct and return bean pole layers with the input specified.
+  Using max_skip_depth == 0 means only connect immediately previous layers.
+  """
   layers = [x_in]
   while len(layers) <= layer_count:
     print("Constructing bean pole layer " + str(len(layers)))
-    input_skip_distance = 1
 
-    print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
-    layer_input = hidden_layer(layers[len(layers) - input_skip_distance], 1)
-    input_skip_distance += 1
-    while input_skip_distance <= max_skip_depth and len(layers) - input_skip_distance >= 0:
-      print("Adding layer " + str(len(layers) - input_skip_distance) + " to input")
-      layer_input += hidden_layer(layers[len(layers) - input_skip_distance], 1)
+    # Add the previous layer to the new layer's input - this is required to keep the network connected
+    print("Adding layer " + str(len(layers) - 1) + " to input")
+    layer_input = layers[len(layers) - 1]
+
+    # Add layers from earlier in the net, up to the max skip depth specified
+    input_skip_distance = 1
+    while input_skip_distance < max_skip_depth and len(layers) - input_skip_distance >= 0:
+      skip_layer_index = len(layers) - input_skip_distance - 1
+      print("Adding layer " + str(skip_layer_index) + " to input")
+
+      # Add the layer with a 1x1 convolution window to weight the entire image with a single parameter.
+      layer_input += hidden_layer(layers[skip_layer_index], 1)
       input_skip_distance += 1
 
-    layer = hidden_layer(layer_input, 5)
-    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=10)
+    layer = bean_pole_module(layers[-1])
+    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
     layers.append(layer)
 
   return layers[-1]
 
 
-def hidden_layer(x_in, convolution_size):
+def bean_pole_module(x_in):
+  h_conv = hidden_layer(x_in, 5, 1, 5)
+
+  output_conv = hidden_layer(h_conv, 5, 5, 1)
+
+  return output_conv
+
+def hidden_layer(x_in, convolution_size, input_feature_count=1, output_feature_count=1):
   """relu convolution with bias"""
-  W_conv = weight_variable([convolution_size, convolution_size, 1, 1])
+  W_conv = weight_variable([convolution_size, convolution_size, input_feature_count, output_feature_count])
   b_conv = bias_variable([1])
   h_conv = tf.nn.relu(conv2d(x_in, W_conv) + b_conv)
 
@@ -151,7 +152,7 @@ def main(_):
 
   # Build the graph for the deep net
   y_conv = bean_pole_net(x)
-  tf.summary.image("output_image", y_conv, collections=["bean_pole_images"], max_outputs=10)
+  tf.summary.image("output_image", y_conv, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
   train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_error)
@@ -227,6 +228,9 @@ if __name__ == '__main__':
   parser.add_argument('--run_name', type=str,
                       default=str(int(time.time())),
                       help='Name for the run')
+  parser.add_argument('--sample_images', type=int,
+                      default=5,
+                      help='Number of images to sample during training')
   FLAGS, unparsed = parser.parse_known_args()
 
   print(FLAGS)
