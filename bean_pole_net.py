@@ -74,7 +74,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
       layer_input += hidden_layer(layers[skip_layer_index], 1)
       input_skip_distance += 1
 
-    layer = bean_pole_module(layers[-1])
+    layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, "module_layer_" + str(len(layers)))
     tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
     layers.append(layer)
@@ -82,18 +82,31 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
   return layers[-1]
 
 
-def bean_pole_module(x_in):
-  h_conv = hidden_layer(x_in, 5, 1, 5)
+def bean_pole_module(x_in, intermediate_channels=5, name="bean_pole_module"):
+  h_conv = hidden_layer(x_in, 5, 1, intermediate_channels, name + "_fan_out")
 
-  output_conv = hidden_layer(h_conv, 5, 5, 1)
+  output_conv = hidden_layer(h_conv, 5, intermediate_channels, 1, name + "_fan_in")
 
   return output_conv
 
-def hidden_layer(x_in, convolution_size, input_feature_count=1, output_feature_count=1):
+def hidden_layer(x_in, convolution_size, input_feature_count=1, output_feature_count=1, name="hidden_layer"):
   """relu convolution with bias"""
   W_conv = weight_variable([convolution_size, convolution_size, input_feature_count, output_feature_count])
   b_conv = bias_variable([1])
   h_conv = tf.nn.relu(conv2d(x_in, W_conv) + b_conv)
+
+  if convolution_size > 1:
+
+    # 5x5 3 channel fan OUT W_conv has shape 5,5,1,3.  Need 3,5,5,1 to get an image per filter.
+    # 5x5 3 channel fan IN W_conv has shape 5,5,3,1.  Need 3,5,5,1 to get an image per filter.
+    feature_maps = tf.stack(tf.split(W_conv, output_feature_count, 3))
+    feature_map_image_count = max(input_feature_count, output_feature_count)
+    feature_maps = tf.reshape(feature_maps, [feature_map_image_count, convolution_size, convolution_size, 1])
+    tf.summary.image(name + "_weights", feature_maps, collections=["bean_pole_images"], max_outputs=feature_map_image_count)
+
+    activations = tf.split(h_conv, output_feature_count, 3)
+    for i in range(0, output_feature_count):
+      tf.summary.image(name + "_activation_" + str(i), activations[i], collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   return h_conv
 
@@ -220,8 +233,11 @@ if __name__ == '__main__':
                       default=10,
                       help='Number of bean pole layers to use between input and output')
   parser.add_argument('--max_skip_depth', type=int,
-                      default=3,
+                      default=1,
                       help='Max number of bean pole layers to skip')
+  parser.add_argument('--fan_out_channels', type=int,
+                      default=3,
+                      help='Number of feature maps to use in each bean pole layer module')
   parser.add_argument('--batch_size', type=int,
                       default=50,
                       help='Training minibatch size')
