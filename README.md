@@ -8,6 +8,8 @@
   - if no run name, use most recent
   - use imageio to save input to output along bean pole as gif
 
+- try incrementally adding layers during training after <0.25MSE breakthroughs
+
 - add skip stride exponential backoff
   - always attach the immediately behind layer
   - attach behind layers at exponentially increasing intervals
