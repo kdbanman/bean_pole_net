@@ -1,7 +1,5 @@
 ### TODO
 
-- organize output images with some prefixes
-
 - look for coadaptations in weights, try dropout if so
 
 - add skip stride exponential backoff

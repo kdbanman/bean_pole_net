@@ -34,6 +34,7 @@ import numpy as np
 
 
 FLAGS = None
+RUN_NAME = None
 
 
 def bean_pole_net(x_in):
@@ -43,7 +44,7 @@ def bean_pole_net(x_in):
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
   x_image = tf.reshape(x_in, [-1, 28, 28, 1])
 
-  tf.summary.image("input image", x_image, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
+  tf.summary.image("1_1_input_image", x_image, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   # Bean pole layers
   bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
@@ -75,7 +76,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
       input_skip_distance += 1
 
     layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, "module_layer_" + str(len(layers)))
-    tf.summary.image("bean pole image " + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
+    tf.summary.image("2_bean_pole_image_" + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
     layers.append(layer)
 
@@ -83,9 +84,9 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
 
 
 def bean_pole_module(x_in, intermediate_channels=5, name="bean_pole_module"):
-  h_conv = hidden_layer(x_in, 5, 1, intermediate_channels, name + "_fan_out")
+  h_conv = hidden_layer(x_in, 5, 1, intermediate_channels, name + "_1_fan_out")
 
-  output_conv = hidden_layer(h_conv, 5, intermediate_channels, 1, name + "_fan_in")
+  output_conv = hidden_layer(h_conv, 5, intermediate_channels, 1, name + "_2_fan_in")
 
   return output_conv
 
@@ -102,11 +103,11 @@ def hidden_layer(x_in, convolution_size, input_feature_count=1, output_feature_c
     feature_maps = tf.stack(tf.split(W_conv, output_feature_count, 3))
     feature_map_image_count = max(input_feature_count, output_feature_count)
     feature_maps = tf.reshape(feature_maps, [feature_map_image_count, convolution_size, convolution_size, 1])
-    tf.summary.image(name + "_weights", feature_maps, collections=["bean_pole_images"], max_outputs=feature_map_image_count)
+    tf.summary.image("4_" + name + "_weights", feature_maps, collections=["bean_pole_images"], max_outputs=feature_map_image_count)
 
     activations = tf.split(h_conv, output_feature_count, 3)
     for i in range(0, output_feature_count):
-      tf.summary.image(name + "_activation_" + str(i), activations[i], collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
+      tf.summary.image("3_" + name + "_activation_" + str(i), activations[i], collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   return h_conv
 
@@ -165,22 +166,22 @@ def main(_):
 
   # Build the graph for the deep net
   y_conv = bean_pole_net(x)
-  tf.summary.image("output_image", y_conv, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
+  tf.summary.image("1_2_output_image", y_conv, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
   train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_error)
 
-  tf.summary.scalar('mean squared error', mean_squared_error, collections=['train_stats'])
+  tf.summary.scalar('mean_squared_train_error', mean_squared_error, collections=['train_stats'])
   merged_train_stats = tf.summary.merge_all(key='train_stats')
   merged_bean_pole_images = tf.summary.merge_all(key='bean_pole_images')
 
   saver = tf.train.Saver()
   with tf.Session() as sess:
 
-    ensure_dir(os.path.join(FLAGS.log_dir, FLAGS.run_name, "train"))
-    ensure_dir(os.path.join(FLAGS.train_dir, FLAGS.run_name))
+    ensure_dir(os.path.join(FLAGS.log_dir, RUN_NAME, "train"))
+    ensure_dir(os.path.join(FLAGS.train_dir, RUN_NAME))
 
-    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, FLAGS.run_name), sess.graph)
+    train_writer = tf.summary.FileWriter(os.path.join(FLAGS.log_dir, RUN_NAME), sess.graph)
     sess.run(tf.global_variables_initializer())
     i = 0
     while True:
@@ -193,10 +194,10 @@ def main(_):
         print('step %d, training error %g' % (i, train_error))
 
       if i % 1000 == 0:
-        saver.save(sess, os.path.join(FLAGS.train_dir, FLAGS.run_name, "model.ckpt"), global_step=i)
+        saver.save(sess, os.path.join(FLAGS.train_dir, RUN_NAME, "model.ckpt"), global_step=i)
         test_error = mean_squared_error.eval(feed_dict={x: mnist.test.images, y_: imagify_batch(mnist.test.labels)})
         print('step %d, test error %g' % (i, test_error))
-        tf.summary.scalar('test_error', test_error, collections=['train_stats'])
+        tf.summary.scalar('mean_squared_test_error', test_error, collections=['train_stats'])
 
       # Train the network, recording stats every tenth step
       if i % 1000 == 0:
@@ -213,7 +214,7 @@ def main(_):
         train_writer.add_summary(summary, i)
       else:
         sess.run(train_step, feed_dict={x: batch[0], y_: batch_targets})
-      
+
       i += 1
 
 if __name__ == '__main__':
@@ -241,13 +242,13 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size', type=int,
                       default=50,
                       help='Training minibatch size')
-  parser.add_argument('--run_name', type=str,
-                      default=str(int(time.time())),
-                      help='Name for the run')
   parser.add_argument('--sample_images', type=int,
                       default=5,
                       help='Number of images to sample during training')
   FLAGS, unparsed = parser.parse_known_args()
 
+  RUN_NAME = str(int(time.time())) + "_" + str(FLAGS.pole_depth) + "Hx" + str(FLAGS.fan_out_channels) + "Wx" + str(FLAGS.max_skip_depth) + "S"
   print(FLAGS)
+  print(RUN_NAME)
+
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
