@@ -48,6 +48,7 @@ def bean_pole_net(x_in):
 
   # Bean pole layers
   bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  tf.add_to_collection("get_output", bean_out)
 
   return bean_out
 
@@ -57,6 +58,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
   Construct and return bean pole layers with the input specified.
   Using max_skip_depth == 0 means only connect immediately previous layers.
   """
+  tf.add_to_collection("get_layer_images", x_in)
   layers = [x_in]
   while len(layers) <= layer_count:
     print("Constructing bean pole layer " + str(len(layers)))
@@ -78,6 +80,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
     layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, "module_layer_" + str(len(layers)))
     tf.summary.image("2_bean_pole_image_" + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
+    tf.add_to_collection("get_layer_images", layer)
     layers.append(layer)
 
   return layers[-1]
@@ -159,7 +162,7 @@ def main(_):
   mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
   # Create the model
-  x = tf.placeholder(tf.float32, [None, 784])
+  x = tf.placeholder(tf.float32, [None, 784], name="input_placeholder")
 
   # Define loss and optimizer
   y_ = tf.placeholder(tf.float32, [None, 28, 28, 1])
