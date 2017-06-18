@@ -2,12 +2,6 @@
 
 - look for coadaptations in weights, try dropout if so
 
-- make forward pass runner script
-  - python forward.py [run_name] [input_image]
-  - if no input image, prompt for on screen draw
-  - if no run name, use most recent
-  - use imageio to save input to output along bean pole as gif
-
 - try incrementally adding layers during training after <0.25MSE breakthroughs
 
 - add skip stride exponential backoff
