@@ -47,7 +47,9 @@ ROW_TEMPLATE = """
   </div>
 """
 
-LAYER_IMAGE_TEMPLATE = "<img class="padRightSmall" src="$DIR_NAME$/$LAYER_IMAGE_FILENAME$"/>"
+LAYER_IMAGE_TEMPLATE = """
+  <img class="padRightSmall" src="$DIR_NAME$/$LAYER_IMAGE_FILENAME$"/>
+"""
 
 
 def get_input_image(filename):
@@ -79,11 +81,14 @@ def write_result_images(input_filepath, output_image, layer_images):
   input_image_filename = os.path.basename(input_filepath)
   input_name_no_extension = os.path.splitext(input_image_filename)[0]
 
-  output_image_filename = os.path.join(FLAGS.input_dir, input_name_no_extension + "_output_image.png")
-  layer_video_filename = os.path.join(FLAGS.input_dir, input_name_no_extension + "_layer_images.gif")
+  output_image_filepath = os.path.join(FLAGS.input_dir, input_name_no_extension + "_output_image.png")
+  layer_video_filepath = os.path.join(FLAGS.input_dir, input_name_no_extension + "_layer_images.gif")
 
-  imageio.imwrite(output_image_filename, output_image)
-  imageio.mimwrite(layer_video_filename, layer_images, duration=0.5)
+  output_image_filename = os.path.basename(output_image_filepath)
+  layer_video_filename = os.path.basename(layer_video_filepath)
+
+  imageio.imwrite(output_image_filepath, output_image)
+  imageio.mimwrite(layer_video_filepath, layer_images, duration=0.5)
 
   i = 0
   layer_image_filenames = []
@@ -91,10 +96,9 @@ def write_result_images(input_filepath, output_image, layer_images):
     layer_image_filename = os.path.join(FLAGS.input_dir, input_name_no_extension + "_layer_image_" + str(i) + ".png")
     imageio.imwrite(layer_image_filename, layer_image)
 
-    layer_image_filenames.append(layer_image_filename)
+    layer_image_filenames.append(os.path.basename(layer_image_filename))
     i += 1
 
-  #write_html_summary(input_image_filename, layer_video_filename, output_image_filename, layer_image_filenames)
   return {
     "input_image_filename": input_image_filename,
     "layer_video_filename": layer_video_filename,
