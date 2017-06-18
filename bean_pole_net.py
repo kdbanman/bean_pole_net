@@ -77,7 +77,7 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
       layer_input += hidden_layer(layers[skip_layer_index], 1)
       input_skip_distance += 1
 
-    layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, "module_layer_" + str(len(layers)))
+    layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, FLAGS.convolution_size, "module_layer_" + str(len(layers)))
     tf.summary.image("2_bean_pole_image_" + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
     tf.add_to_collection("get_layer_images", layer)
@@ -86,10 +86,10 @@ def bean_pole_layers(x_in, layer_count, max_skip_depth):
   return layers[-1]
 
 
-def bean_pole_module(x_in, intermediate_channels=5, name="bean_pole_module"):
-  h_conv = hidden_layer(x_in, 5, 1, intermediate_channels, name + "_1_fan_out")
+def bean_pole_module(x_in, intermediate_channels=5, convolution_size=5, name="bean_pole_module"):
+  h_conv = hidden_layer(x_in, convolution_size, 1, intermediate_channels, name + "_1_fan_out")
 
-  output_conv = hidden_layer(h_conv, 5, intermediate_channels, 1, name + "_2_fan_in")
+  output_conv = hidden_layer(h_conv, convolution_size, intermediate_channels, 1, name + "_2_fan_in")
 
   return output_conv
 
@@ -117,12 +117,12 @@ def hidden_layer(x_in, convolution_size, input_feature_count=1, output_feature_c
 
 def conv2d(x, W):
   """conv2d returns a 2d convolution layer with full stride."""
-  return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+  return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding="SAME")
 
 
 def weight_variable(shape):
   """weight_variable generates a weight variable of a given shape."""
-  initial = tf.truncated_normal(shape, stddev=0.1)
+  initial = tf.truncated_normal(shape, stddev=FLAGS.initialization_stddev)
   return tf.Variable(initial)
 
 
@@ -174,9 +174,10 @@ def main(_):
   mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
   train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_error)
 
-  tf.summary.scalar('mean_squared_train_error', mean_squared_error, collections=['train_stats'])
-  merged_train_stats = tf.summary.merge_all(key='train_stats')
-  merged_bean_pole_images = tf.summary.merge_all(key='bean_pole_images')
+  tf.summary.scalar("mean_squared_train_error", mean_squared_error, collections=["train_stats"])
+  merged_train_stats = tf.summary.merge_all(key="train_stats")
+  merged_bean_pole_images = tf.summary.merge_all(key="bean_pole_images")
+  histograms = tf.summary.merge_all(key="histograms")
 
   saver = tf.train.Saver()
   with tf.Session() as sess:
@@ -194,13 +195,13 @@ def main(_):
       if i % 100 == 0:
         train_error = mean_squared_error.eval(feed_dict={
             x: batch[0], y_: batch_targets})
-        print('step %d, training error %g' % (i, train_error))
+        print("step %d, training error %g" % (i, train_error))
 
       if i % 1000 == 0:
         saver.save(sess, os.path.join(FLAGS.train_dir, RUN_NAME, "model.ckpt"), global_step=i)
         test_error = mean_squared_error.eval(feed_dict={x: mnist.test.images, y_: imagify_batch(mnist.test.labels)})
-        print('step %d, test error %g' % (i, test_error))
-        tf.summary.scalar('mean_squared_test_error', test_error, collections=['train_stats'])
+        print("step %d, test error %g" % (i, test_error))
+        tf.summary.scalar("mean_squared_test_error", test_error, collections=["train_stats"])
 
       # Train the network, recording stats every tenth step
       if i % 1000 == 0:
@@ -220,37 +221,43 @@ def main(_):
 
       i += 1
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   dir_path = os.path.dirname(os.path.realpath(__file__))
 
   parser = argparse.ArgumentParser()
-  parser.add_argument('--data_dir', type=str,
-                      default=os.path.join(dir_path, 'input_data'),
-                      help='Directory for storing input data')
-  parser.add_argument('--train_dir', type=str,
-                      default=os.path.join(dir_path, 'checkpoints'),
-                      help='Directory for storing training checkpoints')
-  parser.add_argument('--log_dir', type=str,
-                      default=os.path.join(dir_path, 'log'),
-                      help='Directory for storing log output')
-  parser.add_argument('--pole_depth', type=int,
+  parser.add_argument("--data_dir", type=str,
+                      default=os.path.join(dir_path, "input_data"),
+                      help="Directory for storing input data")
+  parser.add_argument("--train_dir", type=str,
+                      default=os.path.join(dir_path, "checkpoints"),
+                      help="Directory for storing training checkpoints")
+  parser.add_argument("--log_dir", type=str,
+                      default=os.path.join(dir_path, "log"),
+                      help="Directory for storing log output")
+  parser.add_argument("--pole_depth", type=int,
                       default=10,
-                      help='Number of bean pole layers to use between input and output')
-  parser.add_argument('--max_skip_depth', type=int,
+                      help="Number of bean pole layers to use between input and output")
+  parser.add_argument("--max_skip_depth", type=int,
                       default=1,
-                      help='Max number of bean pole layers to skip')
-  parser.add_argument('--fan_out_channels', type=int,
+                      help="Max number of bean pole layers to skip")
+  parser.add_argument("--fan_out_channels", type=int,
                       default=3,
-                      help='Number of feature maps to use in each bean pole layer module')
-  parser.add_argument('--batch_size', type=int,
-                      default=50,
-                      help='Training minibatch size')
-  parser.add_argument('--sample_images', type=int,
+                      help="Number of feature maps to use in each bean pole layer module")
+  parser.add_argument("--convolution_size", type=int,
                       default=5,
-                      help='Number of images to sample during training')
+                      help="Convolution window size to use in bean pole modules.")
+  parser.add_argument("--initialization_stddev", type=float,
+                      default=0.1,
+                      help="Standard deviation to use when initializing the network weights.")
+  parser.add_argument("--batch_size", type=int,
+                      default=50,
+                      help="Training minibatch size")
+  parser.add_argument("--sample_images", type=int,
+                      default=5,
+                      help="Number of images to sample during training")
   FLAGS, unparsed = parser.parse_known_args()
 
-  RUN_NAME = str(int(time.time())) + "_" + str(FLAGS.pole_depth) + "Hx" + str(FLAGS.fan_out_channels) + "Wx" + str(FLAGS.max_skip_depth) + "S"
+  RUN_NAME = str(int(time.time())) + "_" + str(FLAGS.pole_depth) + "Hx" + str(FLAGS.fan_out_channels) + "Wx" + str(FLAGS.convolution_size) + "Cx" + str(FLAGS.max_skip_depth) + "S"
   print(FLAGS)
   print(RUN_NAME)
 

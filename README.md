@@ -2,6 +2,12 @@
 
 - figure out why output images in forward.py don't match the summary images
 
+- add summary histograms (https://stackoverflow.com/q/42315202/3367144)
+
+- use name scopes to improve summary output and probably graph rendering
+  - https://stackoverflow.com/q/42315202/3367144
+
+
 - look for coadaptations in weights, try dropout if so
 
 - try incrementally adding layers during training after <0.25MSE breakthroughs
