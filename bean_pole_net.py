@@ -36,9 +36,16 @@ import numpy as np
 FLAGS = None
 RUN_NAME = None
 
+LAYERS = None
 
-def bean_pole_net(x_in):
-  """Construct and return an MNIST beanpole net with dropout keep probability as a tuple."""
+
+def construct_bean_pole_net(x_in):
+  """
+  Construct and return an MNIST beanpole net with dropout keep probability as a tuple.
+  MODIFIES GLOBAL LAYERS.
+  """
+  global LAYERS
+
   # Reshape to use within a convolutional neural net.
   # Last dimension is for "features" - there is only one here, since images are
   # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
@@ -46,44 +53,57 @@ def bean_pole_net(x_in):
 
   tf.summary.image("1_1_input_image", x_image, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
-  # Bean pole layers
-  bean_out = bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  add_initial_bean_pole_layers(x_image, FLAGS.pole_depth, FLAGS.max_skip_depth)
+  bean_out = LAYERS[-1]
   tf.add_to_collection("get_output", bean_out)
 
   return bean_out
 
 
-def bean_pole_layers(x_in, layer_count, max_skip_depth):
+def create_bean_pole_layer(existing_graph, max_skip_depth):
+  """
+  Add a layer to an existing bean pole net.
+  """
+  layer_number = len(LAYERS)
+  print("Adding bean pole layer " + str(layer_number))
+
+  # Add the previous layer to the new layer's input - this is required to keep the network connected
+  print("Adding layer " + str(layer_number - 1) + " to input")
+  layer_input = LAYERS[layer_number - 1]
+
+  # Add layers from earlier in the net, up to the max skip depth specified
+  input_skip_distance = 1
+  while input_skip_distance < max_skip_depth and layer_number - input_skip_distance >= 0:
+    skip_layer_index = layer_number - input_skip_distance - 1
+    print("Adding layer " + str(skip_layer_index) + " to input")
+
+    # Add the layer with a 1x1 convolution window to weight the entire image with a single parameter.
+    layer_input += hidden_layer(LAYERS[skip_layer_index], 1)
+    input_skip_distance += 1
+
+  new_output = bean_pole_module(existing_graph, FLAGS.fan_out_channels, FLAGS.convolution_size, "module_layer_" + str(layer_number))
+
+  tf.summary.image("2_bean_pole_image_" + str(layer_number), new_output, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
+  tf.add_to_collection("get_layer_images", new_output)
+
+  return new_output
+
+
+def add_initial_bean_pole_layers(x_in, layer_count, max_skip_depth):
   """
   Construct and return bean pole layers with the input specified.
   Using max_skip_depth == 0 means only connect immediately previous layers.
+  MODIFIES GLOBAL LAYERS.
   """
+  global LAYERS
+
   tf.add_to_collection("get_layer_images", x_in)
-  layers = [x_in]
-  while len(layers) <= layer_count:
-    print("Constructing bean pole layer " + str(len(layers)))
+  LAYERS = [x_in]
+  while len(LAYERS) <= layer_count:
+    layer = create_bean_pole_layer(LAYERS[-1], max_skip_depth)
+    LAYERS.append(layer)
 
-    # Add the previous layer to the new layer's input - this is required to keep the network connected
-    print("Adding layer " + str(len(layers) - 1) + " to input")
-    layer_input = layers[len(layers) - 1]
-
-    # Add layers from earlier in the net, up to the max skip depth specified
-    input_skip_distance = 1
-    while input_skip_distance < max_skip_depth and len(layers) - input_skip_distance >= 0:
-      skip_layer_index = len(layers) - input_skip_distance - 1
-      print("Adding layer " + str(skip_layer_index) + " to input")
-
-      # Add the layer with a 1x1 convolution window to weight the entire image with a single parameter.
-      layer_input += hidden_layer(layers[skip_layer_index], 1)
-      input_skip_distance += 1
-
-    layer = bean_pole_module(layers[-1], FLAGS.fan_out_channels, FLAGS.convolution_size, "module_layer_" + str(len(layers)))
-    tf.summary.image("2_bean_pole_image_" + str(len(layers)), layer, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
-
-    tf.add_to_collection("get_layer_images", layer)
-    layers.append(layer)
-
-  return layers[-1]
+  return LAYERS[-1]
 
 
 def bean_pole_module(x_in, intermediate_channels=5, convolution_size=5, name="bean_pole_module"):
@@ -168,7 +188,7 @@ def main(_):
   y_ = tf.placeholder(tf.float32, [None, 28, 28, 1])
 
   # Build the graph for the deep net
-  y_conv = bean_pole_net(x)
+  y_conv = construct_bean_pole_net(x)
   tf.summary.image("1_2_output_image", y_conv, collections=["bean_pole_images"], max_outputs=FLAGS.sample_images)
 
   mean_squared_error = tf.reduce_mean(tf.squared_difference(y_, y_conv))
