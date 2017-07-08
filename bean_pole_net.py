@@ -99,7 +99,7 @@ def add_initial_bean_pole_layers(x_in, layer_count, max_skip_depth):
 
   tf.add_to_collection("get_layer_images", x_in)
   LAYERS = [x_in]
-  while len(LAYERS) <= layer_count:
+  while len(LAYERS) <= layer_count and len(LAYERS) < FLAGS.initial_depth:
     layer = create_bean_pole_layer(LAYERS[-1], max_skip_depth)
     LAYERS.append(layer)
 
@@ -215,6 +215,10 @@ def main(_):
       if i % 100 == 0:
         train_error = mean_squared_error.eval(feed_dict={
             x: batch[0], y_: batch_targets})
+
+        if train_error < FLAGS.layer_add_threshold and len(LAYERS) <= FLAGS.pole_depth:
+            LAYERS.append(create_bean_pole_layer(LAYERS[-1], FLAGS.max_skip_depth))
+
         print("step %d, training error %g" % (i, train_error))
 
       if i % 1000 == 0:
@@ -257,6 +261,12 @@ if __name__ == "__main__":
   parser.add_argument("--pole_depth", type=int,
                       default=10,
                       help="Number of bean pole layers to use between input and output")
+  parser.add_argument("--initial_depth", type=int,
+                      default=8,
+                      help="Number of bean pole layers to train before adding more")
+  parser.add_argument("--layer_add_threshold", type=float,
+                      default=0.15,
+                      help="Training loss threshold at which to add layers (up to pole_depth)")
   parser.add_argument("--max_skip_depth", type=int,
                       default=1,
                       help="Max number of bean pole layers to skip")
